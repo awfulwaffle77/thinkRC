@@ -3,7 +3,9 @@ A neural network trained in pygame to be used with a real RC Car! (How original 
 
 ## Issues
 
-* Terrain generation overlaps with the current car position.
+* ~~Distance sensors do not work properly in function `get_current_state()`.~~ Fixed by changing the end points in function 
+
+* ~~Terrain generation overlaps with the current car position.~~ Seems to have been fixed?
 
 * ~~Screwed it up and now the startpoint of the sensors is topleft. Whaaat?~~ Fixed by blitting by car.rect
 

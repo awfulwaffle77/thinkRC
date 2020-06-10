@@ -17,6 +17,8 @@ COLOR_GREEN = (0, 255, 0)
 SCREEN_WIDTH = 800
 SCREEN_HEIGHT = 600
 
+BORDER_WEIGHT = 3
+
 FPS = 60
 
 # CAR DIM & COORDS
@@ -102,19 +104,23 @@ def frame_action(action):
         print(car.angle % 360)
         print(car.direction)
     elif action == 2:
-        car.rotate(360-ANGLE)
+        car.rotate(360 - ANGLE)
         print(car.angle % 360)
         print(car.direction)
 
 
 def generate_terrain(elem_number):
     terrain_list = []
+    margins = create_margins()
+    for margin in margins:
+        terrain_list.append(margin)
+
     for i in range(elem_number):
         terrain_x = -1
         terrain_y = -1
         width = np.random.randint(0, CARDIM_HEIGHT * 2)
         height = np.random.randint(0, CARDIM_HEIGHT * 2)
-        # height = CARDIM_HEIGHT
+
         while terrain_x < 0 or STARTPOINT_X - CARDIM_WIDTH // 2 < terrain_x + width // 2 < STARTPOINT_X + CARDIM_WIDTH // 2 \
                 or STARTPOINT_X - CARDIM_WIDTH // 2 < terrain_x - width // 2 < STARTPOINT_X + CARDIM_WIDTH // 2:  # DO NOT GENERATE OVER THE CAR
             terrain_x = np.random.randint(SCREEN_WIDTH)
@@ -152,7 +158,8 @@ def calc_rotated_line(x, y, cx, cy, tetha):
 
 def update_sensors():
     for sensor in car.sensors:
-        x = car.rect.center[0] + car.direction[0] * LINE_LENGTH  # x, y are coordinates of the endpoint of line in facing dir
+        x = car.rect.center[0] + car.direction[0] * LINE_LENGTH
+        # x, y are coordinates of the endpoint of line in facing dir
         y = car.rect.center[1] + car.direction[1] * LINE_LENGTH
         sensor.sp_x, sensor.sp_y = car.rect.center
         sensor.ep_x = ((x - sensor.sp_x) * math.cos(math.radians(sensor.angle)) + (y - sensor.sp_y) * math.sin(
@@ -190,8 +197,8 @@ def get_current_state():
             clipped = elem.rect.clipline(sensor.sp_x, sensor.sp_y, sensor.ep_x, sensor.ep_y)
             if clipped:
                 start, end = clipped
-                x1, y1 = start
-                x2, y2 = end
+                x1, y1 = start  # Where the lines start intersecting
+                x2, y2 = sensor.sp_x, sensor.sp_y
                 dist = math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
                 distances.append(dist)
             else:
@@ -202,13 +209,26 @@ def get_current_state():
     return states
 
 
+def create_margins():
+    """ Creates the borders of the playzone """
+    border_top = Terrain(SCREEN_WIDTH, BORDER_WEIGHT, SCREEN_WIDTH // 2, 0)
+    border_left = Terrain(BORDER_WEIGHT, SCREEN_HEIGHT, 0, SCREEN_HEIGHT // 2)
+    border_bottom = Terrain(SCREEN_WIDTH, BORDER_WEIGHT, SCREEN_WIDTH // 2, SCREEN_HEIGHT)
+    border_right = Terrain(BORDER_WEIGHT, SCREEN_HEIGHT, SCREEN_WIDTH, SCREEN_HEIGHT // 2)
+
+    return border_top, border_left, border_bottom, border_right
+
+
+def crash():  # What happens in case of crash
+    print("I have a crash on u <3")
+
+
 def check_crash():
     """ Check if car's coordinates collided with one of a terrain's. This works only for STEP = 1
     as it verifies only the border of the object"""
     for elem in terrain:
         if elem.rect.colliderect(car.rect):
-            print("Crashed -> ")
-            pygame.quit()
+            crash()
 
 
 def degrees_to_direction(deg, offset):
@@ -294,7 +314,7 @@ clock = pygame.time.Clock()
 
 car = Car(CARDIM_WIDTH, CARDIM_HEIGHT, STARTPOINT_X, STARTPOINT_Y)
 car.sensors = create_sensors()
-terrain = generate_terrain(40)
+terrain = generate_terrain(1)
 
 running = True
 while running:
