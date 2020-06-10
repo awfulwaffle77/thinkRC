@@ -167,10 +167,23 @@ def draw_sensors():
                          (int(sensor.ep_x), int(sensor.ep_y)))
 
 
+def get_minimum_distance(distances):
+    """ Goes through the array of distances and returns the first appearance that is not 0.
+     If every element in array is 0, it return 0. Wonderful! """
+    final_distance = 0
+    for distance in distances:
+        if distance > 0:
+            final_distance = distance
+
+    return final_distance
+
+
 def get_current_state():
     """ Gets the array of states at instant t as stated on page 2, ecuation (1). Every value of the
-    array signifies a distance to the nearest object."""
+    array signifies a distance to the nearest object.
+    First value is sensor at tetha = 0, then ANGLE, then 360 - ANGLE """
     states = []  # array with distances
+    distances = []  # distances relative to all the terrain elements
 
     for sensor in car.sensors:
         for elem in terrain:
@@ -180,9 +193,11 @@ def get_current_state():
                 x1, y1 = start
                 x2, y2 = end
                 dist = math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
-                states.append(dist)
+                distances.append(dist)
             else:
-                states.append(0)
+                distances.append(0)
+        states.append(get_minimum_distance(distances))
+        distances.clear()
 
     return states
 
@@ -279,7 +294,7 @@ clock = pygame.time.Clock()
 
 car = Car(CARDIM_WIDTH, CARDIM_HEIGHT, STARTPOINT_X, STARTPOINT_Y)
 car.sensors = create_sensors()
-terrain = generate_terrain(1)
+terrain = generate_terrain(40)
 
 running = True
 while running:
@@ -309,7 +324,8 @@ while running:
     for elem in terrain:
         screen.blit(elem.image, elem.rect)
 
-    print(get_current_state())
+    x = get_current_state()
+    print(x)
     pygame.display.flip()
     pygame.event.pump()
     clock.tick(FPS)
