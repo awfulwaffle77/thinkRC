@@ -1,9 +1,27 @@
 import pygame
 import operator
+import keras
 from definitions import *
+import DRL
 import math
 import sys
 import numpy as np
+
+
+def define_parameters():
+    params = dict()
+    params['discount_factor'] = DISCOUNT_FACTOR
+    params['learning_rate'] = LEARNING_RATE
+    params['first_layer_size'] = 150  # neurons in the first layer
+    params['second_layer_size'] = 150  # neurons in the second layer
+    params['third_layer_size'] = 150  # neurons in the third layer
+    params['episodes'] = EPISODES
+    params['memory_size'] = 2500
+    params['batch_size'] = 500
+    params['weights_path'] = WEIGHTS_PATH
+    params['load_weights'] = LOAD_WEIGHTS
+    params['train'] = TRAIN
+    return params
 
 
 class Car(pygame.Surface):
@@ -84,7 +102,7 @@ class Endpoint(pygame.Surface):
 def is_safe_state(state):
     """ state is a list(array) of 3 floats, representing distances recorded by the 3 sensors """
     for st in state:
-        if st > MIN_SAFE_DISTANCE:
+        if st < MIN_SAFE_DISTANCE:
             return False  # it is a non-safe state
     return True
 
@@ -130,16 +148,13 @@ def get_reward(old_state, current_state):
 
 
 def frame_action(action):
+    car.move_forward()
     if action == 0:
         return
     elif action == 1:
         car.rotate(ANGLE)
-        print(car.angle % 360)
-        print(car.direction)
     elif action == 2:
         car.rotate(360 - ANGLE)
-        print(car.angle % 360)
-        print(car.direction)
 
 
 def generate_terrain(elem_number):
@@ -255,12 +270,38 @@ def crash():  # What happens in case of crash
     print("I have a crash on u <3")
 
 
-def check_crash():
+def reinit_car_position():
+    while True:
+        x = np.random.randint(SCREEN_WIDTH)
+        y = np.random.randint(SCREEN_HEIGHT)
+        car.rect.center = (x, y)
+        if not check_crash():  # if car isn't in a crash position
+            break
+
+
+def check_crash(skip_reinit=False):
     """ Check if car's coordinates collided with one of a terrain's."""
     for elem in terrain:
         if elem.rect.colliderect(car.rect) and elem != endpoint:
-            return True # car has crashed
+            return True  # car has crashed
     return False
+
+
+def save_coords():
+    f = open(COORDS_PATH, "w")
+    idx = 0
+    for elem in terrain:
+        f.write("Terrain " + str(idx) + str(": ") + str(elem.rect.center) + "\n")
+        idx += 1
+
+    f.write("Endpoint: " + str(endpoint.rect.center) + '\n')
+    f.write("Rewards: \n" + " NONSAFE_TO_SAFE: " + str(NONSAFE_TO_SAFE) + "\n")
+    f.write("SAFE_TO_NONSAFE: " + str(SAFE_TO_NONSAFE) + "\n")
+    f.write("SAFE_TO_SAFE: " + str(SAFE_TO_SAFE) + "\n")
+    f.write("NONSAFE_TO_NONSAFE_CLOSER: " + str(NONSAFE_TO_NONSAFE_CLOSER) + "\n")
+    f.write("NONSAFE_TO_NONSAFE_FARTHER: " + str(NONSAFE_TO_NONSAFE_FARTHER) + "\n")
+    f.write("WINNING_STATE: " + str(WINNING_STATE) + "\n")
+    f.write("FAILURE_STATE: " + str(FAILURE_STATE) + "\n")
 
 
 def degrees_to_direction(deg, offset):
@@ -336,48 +377,100 @@ def degrees_to_direction(deg, offset):
             return calc_rotated_line(1, 0, 0, 0, 330)
 
 
-#############
-# INIT GAME #
-#############
-pygame.init()
-screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-# for setting FPS
-clock = pygame.time.Clock()
+def run():
+    weights_filepath = params['weights_path']
+    if params['load_weights']:
+        agent.model.load_weights(weights_filepath)
+        print("weights loaded")
 
-car = Car(CARDIM_WIDTH, CARDIM_HEIGHT, STARTPOINT_X, STARTPOINT_Y)
-car.sensors = create_sensors()
-terrain = generate_terrain(5)
-endpoint = Endpoint(CARDIM_WIDTH, CARDIM_HEIGHT)
-terrain.append(endpoint)
+    game_counter = 0
+    while game_counter < params['episodes']:
+        current_steps = 0
+        print("Reinitted car pos")
+        reinit_car_position()
+        print("Episode: " + str(game_counter))
+        while current_steps < MAX_STEPS and not check_crash() and not check_win():
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    if params['train']:
+                        agent.model.save_weights(params['weights_path'])
+                        save_coords()
+                    pygame.quit()
+                    sys.exit()
 
-running = True
-while running:
+            if current_steps == 0:
+                frame_action(np.random.randint(2))
 
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-            pygame.quit()
-            sys.exit()
-        if event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_LEFT:
-                frame_action(1)
-            elif event.key == pygame.K_RIGHT:
-                frame_action(2)
+            if not params['train']:
+                agent.epsilon = 0
+            else:
+                # agent.epsilon is set to give randomness to actions
+                agent.epsilon = 1 - (game_counter * DISCOUNT_FACTOR)
 
-    car.move_forward()
-    screen.fill(COLOR_BLACK)
-    # screen.blit(car.image, car.center)  # USE THIS FOR 30 degrees
-    screen.blit(car.image, car.rect)
+            old_state = get_current_state()
 
-    update_sensors()
-    draw_sensors()
+            if np.random.randint(0, 1) < agent.epsilon:
+                final_move = keras.utils.to_categorical(np.random.randint(2), num_classes=3)
+            else:
+                # predict action based on the old state
+                prediction = agent.model.predict(np.reshape(old_state, (1, 3)))
+                final_move = keras.utils.to_categorical(np.argmax(prediction[0]), num_classes=3)
 
-    for elem in terrain:
-        screen.blit(elem.image, elem.rect)
+            frame_action(np.argmax(final_move))
+            new_state = get_current_state()
 
-    x = get_current_state()
-    print(x)
-    pygame.display.flip()
-    pygame.event.pump()
-    clock.tick(FPS)
-    check_crash()
+            reward = get_reward(old_state, new_state)
+
+            if params['train']:
+                # train short memory base on the new action and state
+                agent.train_short_memory(old_state, final_move, reward, new_state, check_crash())
+                # store the new data into a long term memory
+                agent.remember(old_state, final_move, reward, new_state, check_crash())
+
+            ## DISPLAYING CAR
+            screen.fill(COLOR_BLACK)
+            # screen.blit(car.image, car.center)  # USE THIS FOR 30 degrees
+            screen.blit(car.image, car.rect)
+
+            update_sensors()
+            draw_sensors()
+
+            for elem in terrain:
+                screen.blit(elem.image, elem.rect)
+
+            pygame.display.flip()
+            pygame.event.pump()
+            clock.tick(FPS)
+            if check_crash():
+                print("I crashed")
+
+            current_steps += 1
+            if current_steps % 100 == 0:
+                print(current_steps)
+
+        if params['train']:
+            agent.replay_new(agent.memory, params['batch_size'])
+
+        if params['train']:
+            agent.model.save_weights(params['weights_path'])
+            save_coords()
+
+        game_counter += 1
+
+
+if __name__ == '__main__':
+    pygame.init()
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    # for setting FPS
+    clock = pygame.time.Clock()
+
+    params = define_parameters()
+    agent = DRL.DRLAgent(params)
+
+    car = Car(CARDIM_WIDTH, CARDIM_HEIGHT, STARTPOINT_X, STARTPOINT_Y)
+    car.sensors = create_sensors()
+    terrain = generate_terrain(5)
+    endpoint = Endpoint(CARDIM_WIDTH, CARDIM_HEIGHT)
+    terrain.append(endpoint)
+
+    run()

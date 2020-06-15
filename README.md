@@ -8,9 +8,9 @@ A neural network trained in pygame to be used with a real RC Car! (How original 
 
 * Random initial state (car's x, y)
 
-* End point with random init as car
+* ~~End point with random init as car~~
 
-* Make terrain to not overlap with the end point
+* ~~Make terrain to not overlap with the end point~~
 
 ## Issues
 

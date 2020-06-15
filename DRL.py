@@ -10,7 +10,7 @@ from operator import add
 import collections
 
 
-class DQNAgent(object):
+class DRLAgent(object):
     def __init__(self, params):
         self.reward = 0
         self.gamma = 0.9
@@ -31,7 +31,7 @@ class DQNAgent(object):
 
     def network(self):
         model = Sequential()
-        model.add(Dense(output_dim=self.first_layer, activation='relu', input_dim=11))
+        model.add(Dense(output_dim=self.first_layer, activation='relu', input_dim=3))
         model.add(Dense(output_dim=self.second_layer, activation='relu'))
         model.add(Dense(output_dim=self.third_layer, activation='relu'))
         model.add(Dense(output_dim=3, activation='softmax'))
@@ -61,7 +61,8 @@ class DQNAgent(object):
     def train_short_memory(self, state, action, reward, next_state, done):
         target = reward
         if not done:
-            target = reward + self.gamma * np.amax(self.model.predict(next_state.reshape((1, 11)))[0])
-        target_f = self.model.predict(state.reshape((1, 11)))
+            next_state = np.reshape(next_state, (1, 3))
+            target = reward + self.gamma * np.amax(self.model.predict(next_state)[0])
+        target_f = self.model.predict(np.reshape(state, (1, 3)))
         target_f[0][np.argmax(action)] = target
-        self.model.fit(state.reshape((1, 11)), target_f, epochs=1, verbose=0)
+        self.model.fit(np.reshape(state, (1, 3)), target_f, epochs=1, verbose=0)
