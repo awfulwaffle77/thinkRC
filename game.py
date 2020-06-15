@@ -1,46 +1,9 @@
 import pygame
 import operator
-import random
+from definitions import *
 import math
-import time
 import sys
 import numpy as np
-
-# COLOR DEFINITIONS
-COLOR_BLACK = (0, 0, 0)
-COLOR_WHITE = (255, 255, 255)
-COLOR_RED = (255, 0, 0)
-COLOR_BLUE = (0, 0, 255)
-COLOR_GREEN = (0, 255, 0)
-
-# SCREEN SIZE
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 600
-
-BORDER_WEIGHT = 3
-
-FPS = 60
-
-# CAR DIM & COORDS
-STARTPOINT_X = 200
-STARTPOINT_Y = 150
-
-CARDIM_TopRight = 50
-CARDIM_BottomLeft = 50
-
-CARDIM_HEIGHT = 50
-CARDIM_WIDTH = 50
-
-CAR_X = STARTPOINT_X
-CAR_Y = STARTPOINT_Y
-
-# MISC
-ANGLE = 45
-STEP = 1
-VELOCITY = STEP
-BASE_LINE_LENGTH = 150
-LINE_DIVIDER = math.sqrt(2)  # SEEMS TO WORK. HYPOTENUSE?
-LINE_LENGTH = BASE_LINE_LENGTH
 
 
 class Car(pygame.Surface):
@@ -93,7 +56,77 @@ class Terrain(pygame.Surface):
         self.image = self.original_image
         self.rect = self.image.get_rect()
         self.rect.center = (x, y)
-        print("Generated terrain")
+
+
+class Endpoint(pygame.Surface):
+    def __init__(self, width, height):
+        super(Endpoint, self).__init__((width, height))
+        self.original_image = pygame.Surface((width, height), pygame.SRCALPHA)
+        self.width = width
+        self.height = height
+        self.original_image.fill(COLOR_GREEN)
+        self.image = self.original_image
+        self.rect = self.image.get_rect()
+
+        x = -1
+        y = -1
+        width = self.width
+        height = self.height
+
+        for elem in terrain:
+            while x < 0 or y < 0 or elem.rect.colliderect(x, y, width, height):
+                x = np.random.randint(SCREEN_WIDTH)
+                y = np.random.randint(SCREEN_HEIGHT)
+
+        self.rect.center = (x, y)
+
+
+def is_safe_state(state):
+    """ state is a list(array) of 3 floats, representing distances recorded by the 3 sensors """
+    for st in state:
+        if st > MIN_SAFE_DISTANCE:
+            return False  # it is a non-safe state
+    return True
+
+
+def check_got_closer(old_state, current_state):
+    """ Check if in this state, car got closer to object. It will check if any of the distances got lower. """
+    for i in range(len(car.sensors)):  # should be 3 sensors
+        if current_state[i] < old_state[i]:
+            return True  # car got closer to object
+    return False
+
+
+def check_win():
+    if car.rect.colliderect(endpoint.rect):
+        return True
+    return False
+
+
+def get_reward(old_state, current_state):
+    if check_win():
+        return WINNING_STATE
+    if check_crash():
+        return FAILURE_STATE
+    # Moving from Non-Safe State
+    if not is_safe_state(old_state):
+        # to Safe State
+        if is_safe_state(current_state):
+            return NONSAFE_TO_SAFE
+        # to Non-Safe, getting closer
+        elif check_got_closer(old_state, current_state):
+            return NONSAFE_TO_NONSAFE_CLOSER
+        # to Non-Safe, getting farther
+        else:
+            return NONSAFE_TO_NONSAFE_FARTHER
+    # Moving from Safe State
+    else:
+        # to Safe State
+        if is_safe_state(current_state):
+            return SAFE_TO_SAFE
+        # to Non-Safe State
+        else:
+            return SAFE_TO_NONSAFE
 
 
 def frame_action(action):
@@ -175,11 +208,10 @@ def draw_sensors():
 
 
 def get_minimum_distance(distances):
-    """ Goes through the array of distances and returns the first appearance that is not 0.
-     If every element in array is 0, it return 0. Wonderful! """
-    final_distance = 0
+    """ Goes through the array of distances and returns the first appearance that is not 0 or DISTANCE_INF. """
+    final_distance = DISTANCE_INF
     for distance in distances:
-        if distance > 0:
+        if distance > 0 and distance != DISTANCE_INF:
             final_distance = distance
 
     return final_distance
@@ -202,7 +234,7 @@ def get_current_state():
                 dist = math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
                 distances.append(dist)
             else:
-                distances.append(0)
+                distances.append(DISTANCE_INF)
         states.append(get_minimum_distance(distances))
         distances.clear()
 
@@ -224,11 +256,11 @@ def crash():  # What happens in case of crash
 
 
 def check_crash():
-    """ Check if car's coordinates collided with one of a terrain's. This works only for STEP = 1
-    as it verifies only the border of the object"""
+    """ Check if car's coordinates collided with one of a terrain's."""
     for elem in terrain:
-        if elem.rect.colliderect(car.rect):
-            crash()
+        if elem.rect.colliderect(car.rect) and elem != endpoint:
+            return True # car has crashed
+    return False
 
 
 def degrees_to_direction(deg, offset):
@@ -314,7 +346,9 @@ clock = pygame.time.Clock()
 
 car = Car(CARDIM_WIDTH, CARDIM_HEIGHT, STARTPOINT_X, STARTPOINT_Y)
 car.sensors = create_sensors()
-terrain = generate_terrain(1)
+terrain = generate_terrain(5)
+endpoint = Endpoint(CARDIM_WIDTH, CARDIM_HEIGHT)
+terrain.append(endpoint)
 
 running = True
 while running:
@@ -330,10 +364,7 @@ while running:
             elif event.key == pygame.K_RIGHT:
                 frame_action(2)
 
-    # if it >= 1:
     car.move_forward()
-    # it += -1
-    # pygame.time.wait(10)
     screen.fill(COLOR_BLACK)
     # screen.blit(car.image, car.center)  # USE THIS FOR 30 degrees
     screen.blit(car.image, car.rect)
@@ -349,4 +380,4 @@ while running:
     pygame.display.flip()
     pygame.event.pump()
     clock.tick(FPS)
-    # check_crash()
+    check_crash()
