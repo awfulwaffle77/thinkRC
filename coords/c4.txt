@@ -1,0 +1,18 @@
+Terrain 0: (400, 0)
+Terrain 1: (0, 300)
+Terrain 2: (400, 600)
+Terrain 3: (800, 300)
+Terrain 4: (350, 428)
+Terrain 5: (150, 201)
+Terrain 6: (383, 340)
+Terrain 7: (445, 91)
+Terrain 8: (195, 599)
+Endpoint: (750, 30)
+Rewards: 
+ NONSAFE_TO_SAFE: 0.3
+SAFE_TO_NONSAFE: -0.2
+SAFE_TO_SAFE: 0.4
+NONSAFE_TO_NONSAFE_CLOSER: -0.4
+NONSAFE_TO_NONSAFE_FARTHER: 0.4
+WINNING_STATE: 1
+FAILURE_STATE: -0.6

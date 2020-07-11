@@ -12,12 +12,12 @@ def define_parameters():
     params = dict()
     params['discount_factor'] = DISCOUNT_FACTOR
     params['learning_rate'] = LEARNING_RATE
-    params['first_layer_size'] = 150  # neurons in the first layer
-    params['second_layer_size'] = 150  # neurons in the second layer
-    params['third_layer_size'] = 150  # neurons in the third layer
+    params['first_layer_size'] = 500  # neurons in the first layer
+    params['second_layer_size'] = 500  # neurons in the second layer
+    params['third_layer_size'] = 500  # neurons in the third layer
     params['episodes'] = EPISODES
-    params['memory_size'] = 2500
-    params['batch_size'] = 500
+    params['memory_size'] = 5000 # orignially 2500
+    params['batch_size'] = 2000 # originally 500p
     params['weights_path'] = WEIGHTS_PATH
     params['load_weights'] = LOAD_WEIGHTS
     params['train'] = TRAIN
@@ -77,7 +77,7 @@ class Terrain(pygame.Surface):
 
 
 class Endpoint(pygame.Surface):
-    def __init__(self, width, height):
+    def __init__(self, width, height, endpoint_x, endpoint_y):
         super(Endpoint, self).__init__((width, height))
         self.original_image = pygame.Surface((width, height), pygame.SRCALPHA)
         self.width = width
@@ -91,18 +91,18 @@ class Endpoint(pygame.Surface):
         width = self.width
         height = self.height
 
-        for elem in terrain:
-            while x < 0 or y < 0 or elem.rect.colliderect(x, y, width, height):
-                x = np.random.randint(SCREEN_WIDTH)
-                y = np.random.randint(SCREEN_HEIGHT)
+        # for elem in terrain:
+        #     while x < 0 or y < 0 or elem.rect.colliderect(x, y, width, height):
+        #         x = np.random.randint(SCREEN_WIDTH)
+        #         y = np.random.randint(SCREEN_HEIGHT)
 
-        self.rect.center = (x, y)
+        self.rect.center = (endpoint_x, endpoint_y)
 
 
 def is_safe_state(state):
     """ state is a list(array) of 3 floats, representing distances recorded by the 3 sensors """
     for st in state:
-        if st < MIN_SAFE_DISTANCE:
+        if st < MIN_SAFE_DISTANCE: # if at least one sensor detects this
             return False  # it is a non-safe state
     return True
 
@@ -110,7 +110,7 @@ def is_safe_state(state):
 def check_got_closer(old_state, current_state):
     """ Check if in this state, car got closer to object. It will check if any of the distances got lower. """
     for i in range(len(car.sensors)):  # should be 3 sensors
-        if current_state[i] < old_state[i]:
+        if current_state[i] <= old_state[i]:
             return True  # car got closer to object
     return False
 
@@ -271,12 +271,13 @@ def crash():  # What happens in case of crash
 
 
 def reinit_car_position():
-    while True:
-        x = np.random.randint(SCREEN_WIDTH)
-        y = np.random.randint(SCREEN_HEIGHT)
-        car.rect.center = (x, y)
-        if not check_crash():  # if car isn't in a crash position
-            break
+    # while True:
+    #     x = np.random.randint(SCREEN_WIDTH)
+    #     y = np.random.randint(SCREEN_HEIGHT)
+    #     car.rect.center = (x, y)
+    #     if not check_crash():  # if car isn't in a crash position
+    #         break
+    car.rect.center = (STARTPOINT_X, STARTPOINT_Y)
 
 
 def check_crash(skip_reinit=False):
@@ -288,6 +289,7 @@ def check_crash(skip_reinit=False):
 
 
 def save_coords():
+    """ Saves coordinates in the specified file """
     f = open(COORDS_PATH, "w")
     idx = 0
     for elem in terrain:
@@ -377,7 +379,20 @@ def degrees_to_direction(deg, offset):
             return calc_rotated_line(1, 0, 0, 0, 330)
 
 
+def get_reward_relative_to_endpoint(old_car, current_car): # i need the car pos, not sensors
+    """ Gets a reward if car came closer/farther from endpoint """
+    endpoint_coords = endpoint.rect.center
+    old_distance = math.sqrt((old_car[0]-endpoint_coords[0])**2 + (old_car[1] - endpoint_coords[1])**2)
+    current_distance = math.sqrt((current_car[0]-endpoint_coords[0])**2 + (current_car[1] - endpoint_coords[1])**2)
+
+    if old_distance < current_distance: # if car got farther away
+        return FARTHER_FROM_ENDPOINT
+    else:
+        return CLOSER_TO_ENDPOINT
+
+
 def run():
+    printReward = 0
     weights_filepath = params['weights_path']
     if params['load_weights']:
         agent.model.load_weights(weights_filepath)
@@ -398,18 +413,23 @@ def run():
                     pygame.quit()
                     sys.exit()
 
-            if current_steps == 0:
-                frame_action(np.random.randint(2))
+            if current_steps == 0: # If it is the first step in the episode
+                frame_action(np.random.randint(2)) # take a random action
 
             if not params['train']:
                 agent.epsilon = 0
             else:
                 # agent.epsilon is set to give randomness to actions
+                # it will decrease as episodes increase
                 agent.epsilon = 1 - (game_counter * DISCOUNT_FACTOR)
 
             old_state = get_current_state()
+            old_car = car.rect.center
 
-            if np.random.randint(0, 1) < agent.epsilon:
+            # As episodes increase, the random action will be chosen less and less
+            randEps = np.random.random()
+            if randEps < agent.epsilon:
+                # take a random action between 0 and 2
                 final_move = keras.utils.to_categorical(np.random.randint(2), num_classes=3)
             else:
                 # predict action based on the old state
@@ -418,19 +438,26 @@ def run():
 
             frame_action(np.argmax(final_move))
             new_state = get_current_state()
+            current_car = car.rect.center
 
-            reward = get_reward(old_state, new_state)
+            # even though there should be no reward in distance relative to endpoint(because the sensors do not know
+            # where the endpoint is
+            reward = get_reward(old_state, new_state) + get_reward_relative_to_endpoint(old_car, current_car)
+            printReward += reward
 
             if params['train']:
+                done = check_crash()
                 # train short memory base on the new action and state
-                agent.train_short_memory(old_state, final_move, reward, new_state, check_crash())
+                agent.train_short_memory(old_state, final_move, reward, new_state, done)
                 # store the new data into a long term memory
-                agent.remember(old_state, final_move, reward, new_state, check_crash())
+                agent.remember(old_state, final_move, reward, new_state, done)
 
             ## DISPLAYING CAR
             screen.fill(COLOR_BLACK)
             # screen.blit(car.image, car.center)  # USE THIS FOR 30 degrees
+            # DISABLED FOR QUICKED TRAIN
             screen.blit(car.image, car.rect)
+            screen.blit(endpoint.image, endpoint.rect)
 
             update_sensors()
             draw_sensors()
@@ -447,6 +474,7 @@ def run():
             current_steps += 1
             if current_steps % 100 == 0:
                 print(current_steps)
+                print(printReward)
 
         if params['train']:
             agent.replay_new(agent.memory, params['batch_size'])
@@ -470,7 +498,7 @@ if __name__ == '__main__':
     car = Car(CARDIM_WIDTH, CARDIM_HEIGHT, STARTPOINT_X, STARTPOINT_Y)
     car.sensors = create_sensors()
     terrain = generate_terrain(5)
-    endpoint = Endpoint(CARDIM_WIDTH, CARDIM_HEIGHT)
-    terrain.append(endpoint)
+    endpoint = Endpoint(CARDIM_WIDTH, CARDIM_HEIGHT, ENDPOINT_COORDS_X, ENDPOINT_COORDS_Y)
+    # terrain.append(endpoint) # Will not consider the endpoint as terrain
 
     run()
