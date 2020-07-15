@@ -1,7 +1,5 @@
 # thinkRC
 A neural network trained in pygame to be used with a real RC Car! (How original !)
-## Intro
-
 
 ## What I did to fix the problem
 
@@ -9,7 +7,7 @@ A neural network trained in pygame to be used with a real RC Car! (How original 
 it should not get the reward if it switches from a no-object-detected state.
 Does not seem to work, but I'll let that there.
 
-* I am implementing a function that tracks wether the car gets closer or farther
+* I am implementing a function that tracks whether the car gets closer or farther
 from the endpoint. This is not how it should function in real life but I will reward
 it if it comes closer and punish it harshly if it goes farther(with something like
 3*getting closer reward). Edit: It worked early, making the car alternate rewards
@@ -40,8 +38,8 @@ and see how that works
 
 * Exploits the game by going forward to safe states
 
-* Had a problem using np.random.randint(0,1), where this returned only 1(obviously).
-Using np.random.random()
+* ~~Had a problem using np.random.randint(0,1), where this returned only 1(obviously).
+Using np.random.random()~~
 
 * ~~Distance sensors do not work properly in function `get_current_state()`.~~ Fixed by changing the end points in function 
 
@@ -51,14 +49,27 @@ Using np.random.random()
 
 * ~~Center of rect when rotating is also screwed.~~ Fixed by blitting by car.rect
 
-## Not-so-important issues (a.k.a. Feature to implement)
+## Not-so-important issues (a.k.a. Features to implement)
 * Rotating the car to multiple of 30's degrees surely work, but need 
 some work when redrawing sensors. As I see it, implementing this with PyGame
 is a bad idea due to the fact that the Rect and Surfaces store their coordinates as
 int, and not as floats, leading to discrepancies in calculus. *NOTE: decomment code in move_forward, in loop and 
 maybe the self.center property in class Car to test it further.*
 
-## First steps
+## Implementation steps
+1. Created the "car" as a square 
+
+2. Created some random Terrain with which the car could collide with
+
+3. Created the sensors of the car(taking a lot of time to make them draw correctly and at 45 
+degrees)
+
+4. Created the endpoint, where the car would be rewarded
+
+5. Implemented the Deep Reinforced Learning Network where the car would learn to drive itself.(Spoiler:
+it did not work out)
+
+## Remarks
 Creating a pygame to simulate the real environment.
 
 The current state should be represented by the distances recorded by the sensors
